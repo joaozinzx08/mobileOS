@@ -1,0 +1,48 @@
+GESTAOOS SETORIAL - ETAPA 03 DE 07 - Tipo de serviço
+============================================================
+
+Este ZIP é CUMULATIVO: inclui as telas 1 a 3 e as dependências Dart necessárias.
+Pode ser instalado diretamente em um projeto Flutter limpo ou substituir a etapa anterior.
+
+INSTALAÇÃO (Windows PowerShell):
+1. Abra seu projeto Flutter novo: C:\Users\54035204811\StudioProjects\mobile
+2. Antes de extrair, faça backup da pasta lib e do arquivo test/widget_test.dart.
+3. Extraia este ZIP na raiz do projeto, onde existe pubspec.yaml.
+4. Aceite mesclar/substituir SOMENTE os arquivos lib/ e test/widget_test.dart.
+5. Este ZIP não inclui nem altera pubspec.yaml, android/, windows/, e não usa imagens ou plugins adicionais.
+
+Se você adicionou Google Fonts e Image Picker no novo projeto APENAS por causa da versão anterior,
+remova os plugins (execute no diretório do projeto):
+    flutter pub remove google_fonts image_picker
+Caso algum pacote já não exista, remova apenas o que constar no pubspec.yaml.
+
+Depois:
+    flutter pub get
+    flutter analyze
+    flutter test test/widget_test.dart
+    flutter devices
+    flutter run -d RX2X801YXLP -t lib/main.dart --dart-define=GESTAOOS_DEMO_ADMIN_PIN=2468
+
+Credenciais FICTÍCIAS (teste local): matrícula 04218 / PIN 1234
+Configuração (somente ZIP 07): mantenha o dedo pressionado na logo da Home;
+PIN administrativo de demonstração 2468, definido no comando acima.
+
+SEQUÊNCIA DOS ZIPS: 01, 02, 03, 04, 05, 06, 07. Não é necessário usar todos se
+você quiser instalar diretamente uma etapa posterior (cada ZIP já inclui as anteriores).
+
+FLUXO DISPONÍVEL ATÉ ESTA ETAPA:
+Início do setor, Identificação por matrícula e PIN, Tipo de serviço.
+As etapas futuras exibem somente um aviso e opção de voltar à Home.
+
+LIMITAÇÕES IMPORTANTES:
+- Dados demonstrativos em memória; serão perdidos ao encerrar o aplicativo.
+- Nenhuma OS é enviada ao GestaoOS Web nesta fase.
+- QR e câmera são placeholders: requerem integração futura própria.
+- Sem plugin nativo: não implementa kiosk/Lock Task protegido.
+- Identificação por PIN e configuração são simulações; não servem para produção.
+- Não requer instalar Visual Studio para compilar Android.
+- Caso seu projeto ainda tenha OUTROS plugins com componentes Windows, o Flutter
+  poderá continuar pedindo suporte a symlinks. Este código não usa plugins.
+
+REFERÊNCIA VISUAL: wireframes do GestaoOS Tablet Setorial enviados pelo usuário.
+Sem imagem do trabalhador, conforme solicitado.

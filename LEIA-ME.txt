@@ -1,0 +1,16 @@
+ETAPA 08 - MODO TELA CHEIA E INDICACAO DE LIMITES
+
+Extraia na RAIZ do projeto Flutter mobos. Substitua somente:
+- lib/setorial/screens/setorial_root.dart
+- lib/setorial/screens/tablet_settings.dart
+
+Com "Modo quiosque" ativado nas preferencias, o app usa SystemUiMode.immersiveSticky,
+escondendo visualmente as barras do Android. DESLIGADO = restaura barras.
+
+ATENCAO: Isso NAO e modo quiosque seguro. O usuario ainda pode sair do aplicativo.
+Para bloquear o dispositivo em modo dedicado e necessario provisionamento Android
+Device Owner / Lock Task Mode e implementacao nativa gerenciada por TI.
+A chave Exigir matricula/PIN fica bloqueada em ligado ate haver backend real.
+
+Execute dart format lib/setorial/screens/setorial_root.dart lib/setorial/screens/tablet_settings.dart
+flutter analyze
