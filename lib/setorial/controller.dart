@@ -153,6 +153,10 @@ class SetorialController extends ChangeNotifier {
       }
       notifyListeners();
       return false;
+    } on SetorialApiException catch (e) {
+      error = e.message;
+      notifyListeners();
+      return false;
     } finally {
       isCheckingPin = false;
       notifyListeners();
@@ -206,10 +210,15 @@ class SetorialController extends ChangeNotifier {
       _confirmationTimer = null;
       return true;
     } catch (_) {
-      error = 'Não foi possível registrar a OS de demonstração.';
+      error = _submitError(_);
       notifyListeners();
       return false;
     }
+  }
+
+  String _submitError(Object error) {
+    if (error is SetorialApiException) return error.message;
+    return 'Não foi possível registrar a OS.';
   }
 
   void openOrder(WorkOrder o) {
