@@ -51,16 +51,15 @@ class ApiSetorialRepository implements SetorialRepository {
         if (_token != null) 'Authorization': 'Bearer $_token',
       };
 
-  Future<Map<String, dynamic>> _json(http.Response response) async {
-    Map<String, dynamic> data = {};
+  Future<dynamic> _json(http.Response response) async {
+    dynamic data = {};
     try {
-      final decoded = jsonDecode(response.body);
-      if (decoded is Map<String, dynamic>) data = decoded;
+      data = jsonDecode(response.body);
     } catch (_) {}
 
     if (response.statusCode >= 200 && response.statusCode < 300) return data;
 
-    final message = data['error'];
+    final message = data is Map<String, dynamic> ? data['error'] : null;
     if (message is String && message.trim().isNotEmpty) {
       throw SetorialApiException(message);
     }
@@ -144,9 +143,11 @@ class ApiSetorialRepository implements SetorialRepository {
     }
 
     final data = await _json(response);
-    if (data.isEmpty) return const [];
-    final list = data['items'] is List ? data['items'] : data.values.first;
-    if (list is! List) return const [];
+    final list = data is List
+        ? data
+        : data is Map<String, dynamic> && data['items'] is List
+            ? data['items'] as List
+            : const <dynamic>[];
     return list
         .whereType<Map>()
         .map((item) => _workOrder(Map<String, dynamic>.from(item)))
