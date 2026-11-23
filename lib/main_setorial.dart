@@ -17,26 +17,59 @@ void main() {
 class GestaoOSSetorialApp extends StatefulWidget {
   const GestaoOSSetorialApp({super.key, this.repository});
   final SetorialRepository? repository;
+
   @override
   State<GestaoOSSetorialApp> createState() => _GestaoOSSetorialAppState();
 }
+
 class _GestaoOSSetorialAppState extends State<GestaoOSSetorialApp> {
-  late final SetorialController controller = SetorialController(widget.repository ?? DemoSetorialRepository());
+  late final SetorialRepository _repository =
+      widget.repository ??
+      (ApiSetorialRepository.isConfigured
+          ? ApiSetorialRepository()
+          : DemoSetorialRepository());
+
+  late final SetorialController controller = SetorialController(_repository);
+
   @override
-  void dispose() { controller.dispose(); super.dispose(); }
+  void dispose() {
+    controller.dispose();
+    if (_repository is ApiSetorialRepository) {
+      (_repository as ApiSetorialRepository).dispose();
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    const systemFont = bool.fromEnvironment('GESTAOOS_SYSTEM_FONT', defaultValue: false);
+    const systemFont = bool.fromEnvironment(
+      'GESTAOOS_SYSTEM_FONT',
+      defaultValue: false,
+    );
     return MaterialApp(
-    title: 'GestaoOS Setorial', debugShowCheckedModeBanner: false,
-    theme: ThemeData(useMaterial3: true, scaffoldBackgroundColor: SColors.background,
-      colorScheme: ColorScheme.fromSeed(seedColor: SColors.primary),
-      textTheme: (systemFont ? ThemeData.light().textTheme : GoogleFonts.poppinsTextTheme())
-        .apply(bodyColor: SColors.ink, displayColor: SColors.ink)),
-    home: AnimatedBuilder(animation: controller, builder: (_, _) =>
-      Listener(behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => controller.touch(),
-        child: SetorialRoot(controller: controller))),
-  );
+      title: 'GestaoOS Setorial',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        scaffoldBackgroundColor: SColors.background,
+        colorScheme: ColorScheme.fromSeed(seedColor: SColors.primary),
+        textTheme:
+            (systemFont
+                    ? ThemeData.light().textTheme
+                    : GoogleFonts.poppinsTextTheme())
+                .apply(
+                  bodyColor: SColors.ink,
+                  displayColor: SColors.ink,
+                ),
+      ),
+      home: AnimatedBuilder(
+        animation: controller,
+        builder: (_, _) => Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => controller.touch(),
+          child: SetorialRoot(controller: controller),
+        ),
+      ),
+    );
   }
 }
