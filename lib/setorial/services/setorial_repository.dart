@@ -1,13 +1,275 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
 import '../models/setorial_models.dart';
 
-/// Dados exclusivos de demonstração. Não existe autenticação real nesta versão.
-/// Conectar um backend autorizador de tablets antes de qualquer uso empresarial.
 abstract class SetorialRepository {
   Future<List<WorkOrder>> fetchOrders();
   Future<Applicant?> validatePin(String registration, String pin);
   Future<WorkOrder> submitOrder(OrderDraft draft, TabletSettings tablet);
 }
 
+class SetorialApiException implements Exception {
+  const SetorialApiException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Repositório real do GestaoOS Web.
+/// O token recebido na identificação pertence ao solicitante e é usado
+/// para abrir a OS no tenant e setor corretos.
+class ApiSetorialRepository implements SetorialRepository {
+  ApiSetorialRepository({http.Client? client})
+      : _client = client ?? http.Client(),
+        _ownsClient = client == null;
+
+  static const String _apiUrl = String.fromEnvironment('GESTAOOS_API_URL');
+  static const String _companyCode =
+      String.fromEnvironment('GESTAOOS_EMPRESA_CODIGO');
+
+  final http.Client _client;
+  final bool _ownsClient;
+  String? _token;
+  String? _sectorId;
+
+  static bool get isConfigured => _apiUrl.isNotEmpty && _companyCode.isNotEmpty;
+
+  Uri _uri(String path) {
+    final base = _apiUrl.replaceFirst(RegExp(r'/+$'), '');
+    final uri = Uri.tryParse('$base$path');
+    if (uri == null || !['http', 'https'].contains(uri.scheme)) {
+      throw const SetorialApiException('Endereço da API inválido.');
+    }
+    return uri;
+  }
+
+  Map<String, String> _headers({bool json = false}) => {
+        if (json) 'Content-Type': 'application/json',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      };
+
+  Future<Map<String, dynamic>> _json(http.Response response) async {
+    Map<String, dynamic> data = {};
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) data = decoded;
+    } catch (_) {}
+
+    if (response.statusCode >= 200 && response.statusCode < 300) return data;
+
+    final message = data['error'];
+    if (message is String && message.trim().isNotEmpty) {
+      throw SetorialApiException(message);
+    }
+    if (response.statusCode == 401) {
+      _token = null;
+      _sectorId = null;
+      throw const SetorialApiException('Sessão expirada. Identifique-se novamente.');
+    }
+    if (response.statusCode == 429) {
+      throw const SetorialApiException(
+        'Muitas tentativas. Aguarde alguns minutos.',
+      );
+    }
+    throw const SetorialApiException('O GestaoOS Web não aceitou a operação.');
+  }
+
+  @override
+  Future<Applicant?> validatePin(String registration, String pin) async {
+    if (!isConfigured) {
+      throw const SetorialApiException(
+        'Configure GESTAOOS_API_URL e GESTAOOS_EMPRESA_CODIGO.',
+      );
+    }
+
+    http.Response response;
+    try {
+      response = await _client
+          .post(
+            _uri('/setorial/identificar'),
+            headers: _headers(json: true),
+            body: jsonEncode({
+              'codigoEmpresa': _companyCode,
+              'matricula': registration.trim(),
+              'pin': pin,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw const SetorialApiException(
+        'Não foi possível conectar ao GestaoOS Web.',
+      );
+    }
+
+    final data = await _json(response);
+    final token = data['token'];
+    final user = data['usuario'];
+    final sector = data['setor'];
+
+    if (token is! String ||
+        token.isEmpty ||
+        user is! Map<String, dynamic> ||
+        sector is! Map<String, dynamic> ||
+        user['nome'] is! String ||
+        sector['id'] is! String) {
+      throw const SetorialApiException(
+        'O servidor retornou uma identificação inválida.',
+      );
+    }
+
+    _token = token;
+    _sectorId = sector['id'] as String;
+    return Applicant(
+      registration: registration.trim(),
+      name: user['nome'] as String,
+    );
+  }
+
+  @override
+  Future<List<WorkOrder>> fetchOrders() async {
+    if (_token == null) return const [];
+
+    http.Response response;
+    try {
+      response = await _client
+          .get(_uri('/setorial/ordens'), headers: _headers())
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw const SetorialApiException(
+        'Não foi possível atualizar as OS do setor.',
+      );
+    }
+
+    final data = await _json(response);
+    if (data.isEmpty) return const [];
+    final list = data['items'] is List ? data['items'] : data.values.first;
+    if (list is! List) return const [];
+    return list
+        .whereType<Map>()
+        .map((item) => _workOrder(Map<String, dynamic>.from(item)))
+        .toList(growable: false);
+  }
+
+  @override
+  Future<WorkOrder> submitOrder(
+    OrderDraft draft,
+    TabletSettings tablet,
+  ) async {
+    final applicant = draft.applicant;
+    final sectorId = _sectorId;
+    if (_token == null || applicant == null || sectorId == null) {
+      throw const SetorialApiException(
+        'Identifique o solicitante antes de abrir a OS.',
+      );
+    }
+    if (draft.type == null ||
+        draft.description.trim().isEmpty ||
+        draft.location.trim().isEmpty) {
+      throw const SetorialApiException(
+        'Preencha identificação, tipo, local e descrição.',
+      );
+    }
+
+    final request = http.MultipartRequest('POST', _uri('/ordens'));
+    request.headers.addAll(_headers());
+    request.fields.addAll({
+      'titulo': '${draft.type}: ${draft.location}',
+      'descricao': draft.description.trim(),
+      'setorResponsavelId': sectorId,
+      'categoria': draft.type!,
+      'prioridade': draft.priority,
+      'local': draft.location.trim(),
+      'sigilo': 'false',
+    });
+
+    for (final path in draft.photos.take(5)) {
+      try {
+        request.files.add(await http.MultipartFile.fromPath('anexos', path));
+      } catch (_) {
+        throw const SetorialApiException(
+          'Não foi possível preparar uma das fotos da OS.',
+        );
+      }
+    }
+
+    http.StreamedResponse streamed;
+    try {
+      streamed = await request.send().timeout(const Duration(seconds: 30));
+    } catch (_) {
+      throw const SetorialApiException(
+        'Não foi possível enviar a OS ao GestaoOS Web.',
+      );
+    }
+
+    final response = await http.Response.fromStream(streamed);
+    final data = await _json(response);
+    return _workOrder(data);
+  }
+
+  WorkOrder _workOrder(Map<String, dynamic> data) {
+    final rawStatus = data['status'] as String? ?? 'Aberta';
+    final status = switch (rawStatus) {
+      'Aberta' => 'Aberta',
+      'Concluída' => 'Concluída',
+      'Cancelada' => 'Cancelada',
+      _ => 'Em andamento',
+    };
+    final history = <OrderEvent>[];
+    final rawHistory = data['historico'];
+    if (rawHistory is List) {
+      for (final item in rawHistory.whereType<Map>()) {
+        final map = Map<String, dynamic>.from(item);
+        history.add(
+          OrderEvent(
+            map['acao'] as String? ?? 'Atualização',
+            map['descricao'] as String? ?? '',
+          ),
+        );
+      }
+    }
+
+    final created = DateTime.tryParse(
+          data['dataAbertura'] as String? ?? '',
+        ) ??
+        DateTime.now();
+    final local = data['local'] as String? ??
+        _locationFromTitle(data['titulo'] as String? ?? '');
+    final type = data['categoria'] as String? ?? 'Manutenção geral';
+
+    return WorkOrder(
+      protocol: data['protocolo'] as String? ?? '#-----',
+      type: type,
+      title: data['titulo'] as String? ?? type,
+      location: local,
+      status: status,
+      priority: data['prioridade'] as String? ?? 'Média',
+      description: data['descricao'] as String? ?? '',
+      requesterFirstName:
+          _firstName(data['solicitanteNome'] as String? ?? 'Solicitante'),
+      createdAt: created,
+      history: history,
+      demo: false,
+    );
+  }
+
+  String _locationFromTitle(String title) {
+    final index = title.indexOf(': ');
+    return index >= 0 ? title.substring(index + 2) : '';
+  }
+
+  String _firstName(String name) => name.trim().split(' ').first;
+
+  void dispose() {
+    _token = null;
+    _sectorId = null;
+    if (_ownsClient) _client.close();
+  }
+}
+
+/// Dados exclusivos de demonstração, preservados para testes locais.
 class DemoSetorialRepository implements SetorialRepository {
   final List<WorkOrder> _orders = [];
   int _next = 253;
@@ -105,8 +367,6 @@ class DemoSetorialRepository implements SetorialRepository {
   @override
   Future<List<WorkOrder>> fetchOrders() async => List.unmodifiable(_orders);
 
-  /// Credencial fictícia de demonstração, nunca enviada ao servidor.
-  /// Para experimentar as telas: matrícula 04218 e PIN 1234.
   @override
   Future<Applicant?> validatePin(String registration, String pin) async {
     await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -120,7 +380,10 @@ class DemoSetorialRepository implements SetorialRepository {
   }
 
   @override
-  Future<WorkOrder> submitOrder(OrderDraft draft, TabletSettings tablet) async {
+  Future<WorkOrder> submitOrder(
+    OrderDraft draft,
+    TabletSettings tablet,
+  ) async {
     final applicant = draft.applicant;
     if (applicant == null ||
         draft.type == null ||
