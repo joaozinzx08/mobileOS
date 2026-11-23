@@ -103,7 +103,7 @@ class _SetorialSectorOrdersState extends State<SetorialSectorOrders> {
             const Padding(
               padding: EdgeInsets.only(bottom: 18),
               child: Text(
-                'SOMENTE LEITURA · dados demonstrativos',
+                'SOMENTE LEITURA · sincronizado com o GestaoOS Web',
                 style: TextStyle(
                   color: SColors.amber,
                   fontWeight: FontWeight.w800,
